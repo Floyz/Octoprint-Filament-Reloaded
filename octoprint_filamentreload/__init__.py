@@ -17,7 +17,7 @@ class FilamentReloadedPlugin(octoprint.plugin.StartupPlugin,
 
     class filamentStatusWatcher(Thread):
 
-        running = True
+        running = False
 
         def __init__(self):
             Thread.__init__(self)
@@ -29,6 +29,7 @@ class FilamentReloadedPlugin(octoprint.plugin.StartupPlugin,
             self.wCurrentState = wCurrentState
 
         def run(self):
+            self.running= True
             while self.running==True:
                 self.wCurrentState=0
                 self.updateIcon()
@@ -112,9 +113,11 @@ class FilamentReloadedPlugin(octoprint.plugin.StartupPlugin,
                 #GPIO.setmode(GPIO.BCM)
             self._logger.info("Filament Sensor active on GPIO Pin [%s]"%self.pin)
             #GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-            self.filamentStatusWatcher.populate(self._plugin_manager, self._identifier, self.last_state,self._logger)
-            self.filamentStatusWatcher.daemon = True
-            self.filamentStatusWatcher.start()
+
+            if filamentStatusWatcher.running == False:
+                self.filamentStatusWatcher.populate(self._plugin_manager, self._identifier, self.last_state,self._logger)
+                self.filamentStatusWatcher.daemon = True
+                self.filamentStatusWatcher.start()
         else:
             self._logger.info("Pin not configured, won't work unless configured!")
 
@@ -134,7 +137,7 @@ class FilamentReloadedPlugin(octoprint.plugin.StartupPlugin,
 
     def on_settings_save(self, data):
         octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
-        self.filamentStatusWatcher.stopWatch()
+        #self.filamentStatusWatcher.stopWatch()
         self._setup_sensor()
 
     def sensor_enabled(self):
@@ -167,10 +170,13 @@ class FilamentReloadedPlugin(octoprint.plugin.StartupPlugin,
             Events.PRINT_STARTED,
             Events.PRINT_RESUMED
         ):
-            self._logger.info("%s: Enabling filament sensor." % (event))
-            if self.sensor_enabled():
-                #GPIO.remove_event_detect(self.pin)
-                self._logger.info("Filament present, print starting")
+            if self.no_filament():
+                pass
+            else:
+                self._logger.info("%s: Enabling filament sensor." % (event))
+                if self.sensor_enabled():
+                    #GPIO.remove_event_detect(self.pin)
+                    self._logger.info("Filament present, print starting")
 
         # Disable sensor
         elif event in (
@@ -195,14 +201,14 @@ class FilamentReloadedPlugin(octoprint.plugin.StartupPlugin,
                 self._logger.info("Out of filament!")
                 self.last_state = 0
                 self.updateIcon()
-            if self.pause_print:
-                self._logger.info("Pausing print.")
-                self._printer.pause_print()
-                #GPIO.remove_event_detect(self.pin)
-            if self.no_filament_gcode:
-                self._logger.info("Sending out of filament GCODE")
-                self._printer.commands(self.no_filament_gcode)
-                #GPIO.remove_event_detect(self.pin)
+                if self.pause_print:
+                    self._logger.info("Pausing print.")
+                    self._printer.pause_print()
+                    #GPIO.remove_event_detect(self.pin)
+                if self.no_filament_gcode:
+                    self._logger.info("Sending out of filament GCODE")
+                    self._printer.commands(self.no_filament_gcode)
+                    #GPIO.remove_event_detect(self.pin)
         else:
 
             self.state = 1
